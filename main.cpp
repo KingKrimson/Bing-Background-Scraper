@@ -8,21 +8,17 @@ extern "C" {
 }
 
 #include <string>
-#include <sstream>
 #include <fstream>
-#include <ctime>
-#include <iomanip>
-#include <chrono>
-#include <thread>
 #include <iostream>
-#include <cstdlib>
 #include <array>
 #include <vector>
 #include <algorithm>
+#include <filesystem>
 
 namespace {
     const auto save_location = std::string {"D:\\Pictures\\Bing Backgrounds"};
     const auto base_path = std::string {"/HPImageArchive.aspx?n=8&mkt="};
+    const auto jpeg_magic_number = std::string {"\xff\xd8\xff\xe0"};
 
     const auto country_codes = std::array<std::string, 48> {{
         "ar-xa", "de-DE", "pl-PL", "en-xa", "zh-HK", "pt-PT", "es-AR", "en-IN",
@@ -142,6 +138,7 @@ auto main() -> int
     requester bing_requester(L"www.bing.com");
     std::vector<std::string> image_urls;
 
+    // retrieve all image addresses from the server
     for (const auto it : country_codes) {
         auto web_data = bing_requester.request(base_path + it);
 
@@ -160,21 +157,28 @@ auto main() -> int
         }
     }
 
+    // erase any duplicate images
     std::sort(image_urls.begin(), image_urls.end());
     image_urls.erase(std::unique(image_urls.begin(), image_urls.end()),
             image_urls.end());
 
     for (const auto it : image_urls) {
-        auto filename = std::string {it + "_1366x768.jpg"};
+        auto filename = std::string {it + "_1920x1200.jpg"};
         auto image_data = bing_requester.request(filename);
-        if (image_data.substr(0, 4) != std::string {"\xff\xd8\xff\xe0"}) {
+        if (image_data.substr(0, 4) != jpeg_magic_number) {
             continue;
         }
 
+        // truncate useless filename characters
         auto pos = filename.find_last_of('/');
         filename = save_location + filename.substr(pos);
-        std::cout << filename << std::endl;
 
+        // check if file already exists
+        if (std::tr2::sys::exists(std::tr2::sys::path {filename})) {
+            continue;
+        }
+
+        // attempt to save file
         auto out = std::ofstream {filename, std::ios::binary};
         if (out.is_open()) {
             out << image_data;
@@ -182,31 +186,14 @@ auto main() -> int
         } else {
             std::cout << "Failed to save \"" << filename << "\"" << std::endl;
         }
+
+        std::cout << filename << std::endl;
     }
 
     return 0;
 }
 
 #if 0
-for (;;) {
-    std::string web_data = bing_request(L"/HPImageArchive.aspx?format=xml&n=8&mkt=");
-    std::cout << web_data << std::endl;
-
-    std::string image_address;
-    if (!web_data.empty()) {
-        size_t start = web_data.find("g_img={url:\'") + 12;
-        size_t end = web_data.find("\'", start);
-        image_address = std::string(web_data, start, (end - start));
-
-        start = image_address.find("1366x768");
-        if (start) {
-            image_address.replace(start, 8, "1920x1200");
-        }
-    }
-
-    if (last_image_address != image_address) {
-        last_image_address = image_address;
-
         using std::chrono::system_clock;
         tm time_info;
         time_t current_time = system_clock::to_time_t(system_clock::now());
