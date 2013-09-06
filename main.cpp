@@ -1,33 +1,37 @@
+#if defined(_WIN32)
 #define _WIN32_WINNT 0x0501
+#include <filesystem>
+namespace boost {
+    namespace filesystem = std::tr2::sys;
+}
+#else
+#include <boost/filesystem.hpp>
+#endif
 
 #include <iostream>
-#include <istream>
-#include <ostream>
 #include <string>
 #include <vector>
 #include <fstream>
-#include <boost/filesystem.hpp>
+#include <functional>
+
 #include <boost/asio.hpp>
-#include <boost/bind.hpp>
 
 namespace {
     using boost::asio::ip::tcp;
 
-    std::vector<std::string> web_data;
     std::vector<std::string> image_urls;
 
     const auto save_location = std::string { "D:\\Pictures\\Bing Backgrounds" };
     const auto base_path = std::string { "/HPImageArchive.aspx?n=8&mkt=" };
     const auto jpeg_magic_number = std::string { "\xff\xd8\xff\xe0" };
 
-    const auto country_codes = std::vector<std::string> {{
-        "ar-xa", "de-DE", "pl-PL", "en-xa", "zh-HK", "pt-PT", "es-AR", "en-IN",
-        "en-PH", "en-AU", "en-ww", "ru-RU", "de-AT", "en-IE", "en-SG", "nl-BE",
-        "it-IT", "es-ES", "fr-BE", "ja-JP", "sv-SE", "pt-BR", "ko-KR", "fr-CH",
-        "en-CA", "es-xl", "de-CH", "fr-CA", "es-MX", "zh-TW", "es-CL", "nl-NL",
-        "tr-TR", "da-DK", "en-NZ", "en-GB", "fi-FI", "nb-NO", "fr-FR", "zh-CN",
-        "es-US", "en-US"
-    }};
+    const auto country_codes = std::vector<std::string>
+    {{ "ar-xa", "de-DE", "pl-PL", "en-xa", "zh-HK", "pt-PT", "es-AR", "en-IN",
+    "en-PH", "en-AU", "en-ww", "ru-RU", "de-AT", "en-IE", "en-SG", "nl-BE",
+    "it-IT", "es-ES", "fr-BE", "ja-JP", "sv-SE", "pt-BR", "ko-KR", "fr-CH",
+    "en-CA", "es-xl", "de-CH", "fr-CA", "es-MX", "zh-TW", "es-CL", "nl-NL",
+    "tr-TR", "da-DK", "en-NZ", "en-GB", "fi-FI", "nb-NO", "fr-FR", "zh-CN",
+    "es-US", "en-US" }};
 
     class request_base {
     public:
@@ -41,52 +45,57 @@ namespace {
 
             tcp::resolver::query query(server, "http");
             resolver.async_resolve(query,
-                boost::bind(&request_base::handle_resolve, this,
-                boost::asio::placeholders::error,
-                boost::asio::placeholders::iterator));
+                std::bind(&request_base::handle_resolve, this,
+                std::placeholders::_1, std::placeholders::_2));
         }
 
-        virtual void handle_read_content(const boost::system::error_code&)
-        {
-        }
-
-        virtual void handle_read_headers(const boost::system::error_code& ec)
+        virtual void handle_read_content(const boost::system::error_code& ec,
+            size_t bytes_transferred)
         {
             if (!ec) {
-                std::istream response_stream(&response);
-                std::string header;
-                while (std::getline(response_stream, header) && header != "\r");
+                response.consume(bytes_transferred);
 
                 boost::asio::async_read(sock, response,
                     boost::asio::transfer_at_least(1),
-                    boost::bind(&request_base::handle_read_content, this,
-                    boost::asio::placeholders::error));
+                    std::bind(&request_base::handle_read_content, this,
+                    std::placeholders::_1, std::placeholders::_2));
             }
         }
 
-        virtual void handle_status_line(const boost::system::error_code& ec)
+        virtual void handle_read_headers(const boost::system::error_code& ec,
+            size_t bytes_transferred)
         {
             if (!ec) {
-                std::istream response_stream(&response);
-                std::string http_version;
-                response_stream >> http_version;
-                unsigned int status_code;
-                response_stream >> status_code;
-                std::string status_message;
-                std::getline(response_stream, status_message);
+                response.consume(bytes_transferred);
+
+                boost::asio::async_read(sock, response,
+                    boost::asio::transfer_at_least(1),
+                    std::bind(&request_base::handle_read_content, this,
+                    std::placeholders::_1, std::placeholders::_2));
+            }
+        }
+
+        virtual void handle_status_line(const boost::system::error_code& ec,
+            size_t bytes_transferred)
+        {
+            if (!ec) {
+                response.consume(bytes_transferred);
 
                 boost::asio::async_read_until(sock, response, "\r\n\r\n",
-                    boost::bind(&request_base::handle_read_headers, this,
-                    boost::asio::placeholders::error));
+                    std::bind(&request_base::handle_read_headers, this,
+                    std::placeholders::_1, std::placeholders::_2));
             }
         }
 
-        virtual void write_request_handler(const boost::system::error_code& ec)
+        virtual void write_request_handler(const boost::system::error_code& ec,
+            size_t bytes_transferred)
         {
             if (!ec) {
+                response.consume(bytes_transferred);
+
                 boost::asio::async_read_until(sock, response, "\r\n",
-                    boost::bind(&request_base::handle_status_line, this,
-                    boost::asio::placeholders::error));
+                    std::bind(&request_base::handle_status_line, this,
+                    std::placeholders::_1, std::placeholders::_2));
             }
         }
 
@@ -94,8 +103,8 @@ namespace {
         {
             if (!ec) {
                 boost::asio::async_write(sock, request,
-                    boost::bind(&request_base::write_request_handler, this,
-                    boost::asio::placeholders::error));
+                    std::bind(&request_base::write_request_handler, this,
+                    std::placeholders::_1, std::placeholders::_2));
             }
         }
 
@@ -104,8 +113,8 @@ namespace {
         {
             if (!ec) {
                 sock.async_connect(*it,
-                    boost::bind(&request_base::handle_connect,
-                    this, boost::asio::placeholders::error));
+                    std::bind(&request_base::handle_connect, this,
+                    std::placeholders::_1));
             }
         }
 
@@ -126,32 +135,33 @@ namespace {
         {
         }
 
-        virtual void handle_read_content(const boost::system::error_code& ec)
+        virtual void write_request_handler(const boost::system::error_code& ec,
+            size_t bytes_transferred)
         {
             if (!ec) {
-                data << &response;
-
                 boost::asio::async_read(sock, response,
                     boost::asio::transfer_at_least(1),
-                    boost::bind(&xml_request::handle_read_content, this,
-                    boost::asio::placeholders::error));
+                    std::bind(&xml_request::write_request_handler, this,
+                    std::placeholders::_1, std::placeholders::_2));
+            } else {
+                data << &response;
+
+                size_t pos { 0 };
+                for (;;) {
+                    auto start = data.str().find("<urlBase>", pos) + 9;
+                    auto end = data.str().find("</urlBase>", start);
+
+                    if (start - 9 == std::string::npos ||
+                        end == std::string::npos) {
+                            break;
+                    }
+
+                    image_urls.emplace_back(std::string { data.str(),
+                        start, end - start });
+
+                    pos = end + 10;
+                };
             }
-
-            size_t pos { 0 };
-            do {
-                auto start = data.str().find("<urlBase>", pos) + 9;
-                auto end = data.str().find("</urlBase>", start);
-
-                if (start - 9 == std::string::npos ||
-                    end == std::string::npos) {
-                        break;
-                }
-
-                image_urls.emplace_back(std::string { data.str(),
-                    start, end - start });
-
-                pos = end + 10;
-            } while (true);
         }
     };
 
@@ -163,16 +173,17 @@ namespace {
         {
         }
 
-        virtual void handle_read_content(const boost::system::error_code& ec)
+        virtual void handle_read_content(const boost::system::error_code& ec,
+            size_t bytes_transferred)
         {
             if (!ec) {
-                data << &response;
-
                 boost::asio::async_read(sock, response,
                     boost::asio::transfer_at_least(1),
-                    boost::bind(&image_request::handle_read_content, this,
-                    boost::asio::placeholders::error));
+                    std::bind(&image_request::handle_read_content, this,
+                    std::placeholders::_1, std::placeholders::_2));
             } else {
+                data << &response;
+
                 if (data.str().substr(0, 4) != jpeg_magic_number) {
                     return;
                 }
@@ -180,10 +191,7 @@ namespace {
                 auto pos = filename.find_last_of('/');
                 filename = save_location + filename.substr(pos);
 
-                if (boost::filesystem::exists(
-                    boost::filesystem::path { filename })) {
-                        return;
-                }
+                std::cout << filename << std::endl;
 
                 auto out = std::ofstream { filename, std::ios::binary };
                 if (out.is_open()) {
@@ -192,6 +200,25 @@ namespace {
                 }
             }
         }
+
+        void handle_read_status_line(const boost::system::error_code& ec,
+            size_t bytes_transferred)
+        {
+            if (!ec) {
+                std::istream response_stream(&response);
+                std::string http_version;
+                response_stream >> http_version;
+                unsigned int status_code;
+                response_stream >> status_code;
+
+                if (status_code != 200) {
+                    return;
+                }
+
+                request_base::handle_status_line(ec, bytes_transferred);
+            }
+        }
+
 
     private:
         std::string filename;
@@ -212,8 +239,18 @@ int main()
         image_urls.end());
 
     for (const auto& it : image_urls) {
+        auto filename = it + "_1920x1200.jpg";
+
+        auto pos = filename.find_last_of('/');
+        if (boost::filesystem::exists(
+            boost::filesystem::path { save_location + filename.substr(pos) })) {
+                std::cout << "file already exists" << std::endl;
+                continue;
+        }
+
+        std::cout << filename << std::endl;
+
         boost::asio::io_service io_service;
-        auto filename = it + "_1366x768.jpg";
         image_request requester(io_service, "www.bing.com", filename);
         io_service.run();
     }
