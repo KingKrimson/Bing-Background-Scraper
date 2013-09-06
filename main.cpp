@@ -1,11 +1,15 @@
 #if defined(_WIN32)
 #define _WIN32_WINNT 0x0501
+#if _MSC_VER>=1700
 #include <filesystem>
 namespace boost {
     namespace filesystem = std::tr2::sys;
 }
 #else
-#include <boost/filesystem.hpp>
+#include <boost\filesystem.hpp>
+#endif
+#else
+#include <boost\filesystem.hpp>
 #endif
 
 #include <iostream>
@@ -21,6 +25,8 @@ namespace {
 
     std::vector<std::string> image_urls;
 
+    const auto standard_defintion = std::string { "_1366x768.jpg" };
+    const auto high_definition = std::string { "_1920x1200.jpg" };
     const auto save_location = std::string { "D:\\Pictures\\Bing Backgrounds" };
     const auto base_path = std::string { "/HPImageArchive.aspx?n=8&mkt=" };
     const auto jpeg_magic_number = std::string { "\xff\xd8\xff\xe0" };
@@ -168,8 +174,9 @@ namespace {
     class image_request : public request_base {
     public:
         image_request(boost::asio::io_service& io_service,
-            const std::string& server, const std::string& path) :
-            request_base(io_service, server, path), filename(path)
+            const std::string &server, const std::string &path,
+            const std::string &filename) :
+            request_base(io_service, server, path), filename(filename)
         {
         }
 
@@ -187,11 +194,6 @@ namespace {
                 if (data.str().substr(0, 4) != jpeg_magic_number) {
                     return;
                 }
-
-                auto pos = filename.find_last_of('/');
-                filename = save_location + filename.substr(pos);
-
-                std::cout << filename << std::endl;
 
                 auto out = std::ofstream { filename, std::ios::binary };
                 if (out.is_open()) {
@@ -228,6 +230,8 @@ namespace {
 
 int main()
 {
+    auto definition = high_definition;
+
     for (const auto& it : country_codes) {
         boost::asio::io_service io_service;
         xml_request requester(io_service, "www.bing.com", base_path + it);
@@ -238,20 +242,20 @@ int main()
     image_urls.erase(std::unique(image_urls.begin(), image_urls.end()),
         image_urls.end());
 
-    for (const auto& it : image_urls) {
-        auto filename = it + "_1920x1200.jpg";
+    for (auto& it : image_urls) {
+        auto off = it.find_last_of('/');
+        auto len = it.find_first_of('_') - off;
+        auto filename = save_location + it.substr(off, len) + definition;
 
-        auto pos = filename.find_last_of('/');
         if (boost::filesystem::exists(
-            boost::filesystem::path { save_location + filename.substr(pos) })) {
-                std::cout << "file already exists" << std::endl;
+            boost::filesystem::path { filename })) {
                 continue;
         }
 
-        std::cout << filename << std::endl;
+        it.append(definition);
 
         boost::asio::io_service io_service;
-        image_request requester(io_service, "www.bing.com", filename);
+        image_request requester(io_service, "www.bing.com", it, filename);
         io_service.run();
     }
 
