@@ -7,20 +7,16 @@ namespace {
     std::mutex image_urls_mutex;
     std::vector<std::string> image_urls;
 
-    xml_request::xml_request(boost::asio::io_service& io_service,
-        const std::string& server, const std::string& path) :
-        request_base(io_service, server, path)
+    xml_request::xml_request(const std::string& server, const std::string& path)
+        : request_base(server, path)
     {
     }
 
-    void xml_request::write_request(const boost::system::error_code& ec,
+    void xml_request::read_content(const boost::system::error_code& error,
         size_t bytes_transferred)
     {
-        if (!ec) {
-            boost::asio::async_read(sock, response,
-                boost::asio::transfer_at_least(1),
-                std::bind(&xml_request::write_request, this,
-                std::placeholders::_1, std::placeholders::_2));
+        if (!error) {
+            request_base::read_content(error, bytes_transferred);
         } else {
             data << &response;
 
@@ -44,21 +40,17 @@ namespace {
         }
     }
 
-    image_request::image_request(boost::asio::io_service& io_service,
-        const std::string &server, const std::string &path,
-        const std::string &filename) :
-        request_base(io_service, server, path), filename(filename)
+    image_request::image_request(const std::string &server,
+        const std::string &path, const std::string &filename)
+        : request_base(server, path), filename(filename)
     {
     }
 
-    void image_request::read_content(const boost::system::error_code& ec,
+    void image_request::read_content(const boost::system::error_code& error,
         size_t bytes_transferred)
     {
-        if (!ec) {
-            boost::asio::async_read(sock, response,
-                boost::asio::transfer_at_least(1),
-                std::bind(&image_request::read_content, this,
-                std::placeholders::_1, std::placeholders::_2));
+        if (!error) {
+            request_base::read_content(error, bytes_transferred);
         } else {
             data << &response;
 
@@ -76,10 +68,10 @@ namespace {
         }
     }
 
-    void image_request::status_line(const boost::system::error_code& ec,
+    void image_request::read_status(const boost::system::error_code& error,
         size_t bytes_transferred)
     {
-        if (!ec) {
+        if (!error) {
             std::istream response_stream(&response);
             std::string http_version;
             response_stream >> http_version;
@@ -90,7 +82,7 @@ namespace {
                 return;
             }
 
-            request_base::status_line(ec, bytes_transferred);
+            request_base::read_status(error, bytes_transferred);
         }
     }
 }
@@ -100,15 +92,13 @@ int main()
     boost::filesystem::create_directories(
         boost::filesystem::path { save_location });
 
-    auto definition = high_definition;
+    auto resolution = resolutions[12];
 
     std::vector<std::future<void>> xml_tasks;
 
     for (const auto& it : country_codes) {
         xml_tasks.emplace_back(std::async(std::launch::async, [=]() {
-            boost::asio::io_service io_service;
-            xml_request requester(io_service, "www.bing.com", base_path + it);
-            io_service.run();
+            xml_request { "www.bing.com", base_path + it }.run();            
         }));
     }
 
@@ -116,16 +106,12 @@ int main()
         it.wait();
     }
 
-    std::sort(image_urls.begin(), image_urls.end());
-    image_urls.erase(std::unique(image_urls.begin(), image_urls.end()),
-        image_urls.end());
-
     std::vector<std::future<void>> image_threads;
 
     for (const auto& it : image_urls) {
         auto off = it.find_last_of('/');
         auto len = it.find_first_of('_') - off;
-        auto filename = save_location + it.substr(off, len) + definition;
+        auto filename = save_location + it.substr(off, len) + resolution;
 
         if (boost::filesystem::exists(
             boost::filesystem::path { filename })) {
@@ -133,10 +119,7 @@ int main()
         }
 
         image_threads.emplace_back(std::async(std::launch::async, [=]() {
-            boost::asio::io_service io_service;
-            image_request requester(io_service, "www.bing.com", it + definition,
-                filename);
-            io_service.run();
+            image_request { "www.bing.com", it + resolution, filename }.run();
         }));
     }
 
@@ -144,5 +127,5 @@ int main()
         it.wait();
     }
 
-        return 0;
+    return 0;
 }
