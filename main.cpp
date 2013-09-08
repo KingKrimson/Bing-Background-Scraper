@@ -99,10 +99,22 @@ namespace {
     }
 }
 
-int main()
+int main(int argc, char **argv)
 {
+    if (argc == 1) {
+        std::string executable_name { argv[1] };
+        auto off = executable_name.find_last_of('/');
+        auto len = executable_name.length();
+        executable_name = executable_name.substr(off, len - off);
+
+        std::cout << "please supply a save directory" << std::endl <<
+            "Example: " << executable_name << " C:/bing backgrounds" <<
+            std::endl;
+        return 1;
+    }
+
     boost::filesystem::create_directories(
-        boost::filesystem::path { save_location });
+        boost::filesystem::path { argv[1] });
 
     auto resolution = resolutions[12];
 
@@ -123,7 +135,7 @@ int main()
     for (const auto& it : image_urls) {
         auto off = it.find_last_of('/');
         auto len = it.find_first_of('_') - off;
-        std::string filename = save_location + it.substr(off, len) + resolution;
+        std::string filename = argv[1] + it.substr(off, len) + resolution;
 
         if (boost::filesystem::exists(boost::filesystem::path { filename })) {
             continue;

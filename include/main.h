@@ -31,7 +31,6 @@ namespace {
     "es-US", "en-US" };
     */
 
-    const auto save_location = std::string { "D:/Pictures/Bing Backgrounds" };
     const auto base_path = std::string { "/HPImageArchive.aspx?n=8&mkt=" };
     const auto jpeg_magic_number = std::string { "\xff\xd8\xff\xe0" };
 
