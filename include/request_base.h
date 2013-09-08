@@ -1,6 +1,8 @@
 #pragma once
 
-#include "pch.h"
+#include <sstream>
+#include <string>
+#include <boost\asio.hpp>
 
 namespace bbd {
     using boost::asio::ip::tcp;

@@ -1,7 +1,14 @@
 #pragma once
 
-#include "pch.h"
 #include "request_base.h"
+#include <string>
+#include <vector>
+
+namespace boost {
+    namespace system {
+        class error_code;
+    }
+}
 
 namespace {
     const auto resolutions = std::vector<std::string>
@@ -28,9 +35,9 @@ namespace {
     const auto base_path = std::string { "/HPImageArchive.aspx?n=8&mkt=" };
     const auto jpeg_magic_number = std::string { "\xff\xd8\xff\xe0" };
 
-    class xml_request : public bbd::request_base {
+    class bing_xml_request : public bbd::request_base {
     public:
-        xml_request(const std::string &, const std::string &);
+        bing_xml_request(const std::string &, const std::string &);
 
         void read_content(const boost::system::error_code &, size_t);
     };

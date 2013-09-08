@@ -1,18 +1,31 @@
-#include "include\pch.h"
-
 #include "include\main.h"
 #include "include\request_base.h"
+
+#if _MSC_VER>=1700
+#include <filesystem>
+namespace boost {
+    namespace filesystem = std::tr2::sys;
+}
+#else
+#include <boost\filesystem.hpp>
+#endif
+
+#include <mutex>
+#include <string>
+#include <vector>
+#include <future>
+#include <boost\system\error_code.hpp>
 
 namespace {
     std::mutex image_urls_mutex;
     std::vector<std::string> image_urls;
 
-    xml_request::xml_request(const std::string& server, const std::string& path)
+    bing_xml_request::bing_xml_request(const std::string& server,
+        const std::string& path)
         : request_base(server, path)
-    {
-    }
+    {}
 
-    void xml_request::read_content(const boost::system::error_code& error,
+    void bing_xml_request::read_content(const boost::system::error_code& error,
         size_t bytes_transferred)
     {
         if (!error) {
@@ -43,8 +56,7 @@ namespace {
     image_request::image_request(const std::string &server,
         const std::string &path, const std::string &filename)
         : request_base(server, path), filename(filename)
-    {
-    }
+    {}
 
     void image_request::read_content(const boost::system::error_code& error,
         size_t bytes_transferred)
@@ -98,11 +110,11 @@ int main()
 
     for (const auto& it : country_codes) {
         xml_tasks.emplace_back(std::async(std::launch::async, [=]() {
-            xml_request { "www.bing.com", base_path + it }.run();            
+            bing_xml_request { "www.bing.com", base_path + it }.run();
         }));
     }
 
-    for (const auto &it : xml_tasks) {
+    for (const auto& it : xml_tasks) {
         it.wait();
     }
 
@@ -111,11 +123,10 @@ int main()
     for (const auto& it : image_urls) {
         auto off = it.find_last_of('/');
         auto len = it.find_first_of('_') - off;
-        auto filename = save_location + it.substr(off, len) + resolution;
+        std::string filename = save_location + it.substr(off, len) + resolution;
 
-        if (boost::filesystem::exists(
-            boost::filesystem::path { filename })) {
-                continue;
+        if (boost::filesystem::exists(boost::filesystem::path { filename })) {
+            continue;
         }
 
         image_threads.emplace_back(std::async(std::launch::async, [=]() {

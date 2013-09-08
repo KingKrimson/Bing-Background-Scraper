@@ -1,5 +1,10 @@
-#include "include\pch.h"
 #include "include\request_base.h"
+
+#include <string>
+#include <ostream>
+#include <functional>
+
+#include <boost\asio.hpp>
 
 namespace bbd {
     using boost::asio::ip::tcp;
