@@ -102,13 +102,13 @@ namespace {
 int main(int argc, char **argv)
 {
     if (argc == 1) {
-        std::string executable_name { argv[1] };
-        auto off = executable_name.find_last_of('/');
+        std::string executable_name { argv[0] };
+        auto off = executable_name.find_last_of('\\') + 1;
         auto len = executable_name.length();
         executable_name = executable_name.substr(off, len - off);
 
         std::cout << "please supply a save directory" << std::endl <<
-            "Example: " << executable_name << " C:/bing backgrounds" <<
+            "Example: \"" << executable_name << "\" \"C:/bing backgrounds\"" <<
             std::endl;
         return 1;
     }
