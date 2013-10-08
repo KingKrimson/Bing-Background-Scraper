@@ -95,9 +95,10 @@ namespace {
         size_t bytes_transferred)
     {
         if (!error) {
+            using std::numeric_limits;
+
             std::istream response_stream(&response);
-            std::string http_version;
-            response_stream >> http_version;
+            response_stream.ignore(numeric_limits<std::streamsize>::max(), ' ');
             unsigned int status_code;
             response_stream >> status_code;
 
