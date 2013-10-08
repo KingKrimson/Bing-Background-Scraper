@@ -3,26 +3,30 @@
 
 #if _MSC_VER>=1700
 #include <filesystem>
-namespace boost {
-    namespace filesystem = std::tr2::sys;
-}
 #else
 #include <boost\filesystem.hpp>
+namespace std {
+    namespace tr2 {
+        namespace sys = boost::filesystem;
+    }
+}
 #endif
 
 #include <mutex>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <future>
+#include <chrono>
 #include <boost\system\error_code.hpp>
 
 namespace {
+    using url = std::pair<std::string, std::string>;
     std::mutex image_urls_mutex;
-    std::vector<std::string> image_urls;
+    std::vector<url> image_urls;
 
-    bing_xml_request::bing_xml_request(const std::string& server,
-        const std::string& path)
-        : request_base(server, path)
+    bing_xml_request::bing_xml_request(std::string server, std::string path)
+        : request_base(std::move(server), std::move(path))
     {}
 
     void bing_xml_request::read_content(const boost::system::error_code& error,
@@ -33,6 +37,7 @@ namespace {
         } else {
             data << &response;
 
+            // find each image URL
             size_t pos { 0 };
             for (;;) {
                 auto start = data.str().find("<urlBase>", pos) + 9;
@@ -43,9 +48,14 @@ namespace {
                         break;
                 }
 
+                std::string lhs { data.str(), start, end - start };
+
+                auto off = lhs.find_last_of('/');
+                auto len = lhs.find_first_of('_') - off;
+                std::string rhs { lhs.substr(off, len) };
+
                 image_urls_mutex.lock();
-                image_urls.emplace_back(std::string { data.str(),
-                    start, end - start });
+                image_urls.emplace_back(lhs, rhs);
                 image_urls_mutex.unlock();
 
                 pos = end + 10;
@@ -53,9 +63,10 @@ namespace {
         }
     }
 
-    image_request::image_request(const std::string &server,
-        const std::string &path, const std::string &filename)
-        : request_base(server, path), filename(filename)
+    image_request::image_request(std::string server, std::string path,
+        std::string filename)
+        : request_base(std::move(server), std::move(path)),
+        filename(std::move(filename))
     {}
 
     void image_request::read_content(const boost::system::error_code& error,
@@ -101,6 +112,7 @@ namespace {
 
 int main(int argc, char **argv)
 {
+    // check for user-defined directory
     if (argc == 1) {
         std::string executable_name { argv[0] };
         auto off = executable_name.find_last_of('\\') + 1;
@@ -113,16 +125,15 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    boost::filesystem::create_directories(
-        boost::filesystem::path { argv[1] });
-
-    auto resolution = resolutions[12];
+    std::tr2::sys::create_directories(std::tr2::sys::path { argv[1] });
 
     std::vector<std::future<void>> xml_tasks;
+    xml_tasks.reserve(country_codes.size());
 
+    // asynchronously download and parse the image URLs
     for (const auto& it : country_codes) {
         xml_tasks.emplace_back(std::async(std::launch::async, [=]() {
-            bing_xml_request { "www.bing.com", base_path + it }.run();
+            bing_xml_request { website, base_path + it }.run();
         }));
     }
 
@@ -130,19 +141,41 @@ int main(int argc, char **argv)
         it.wait();
     }
 
+    // sort URLs by their filename
+    std::sort(image_urls.begin(), image_urls.end(),
+        [](const url& lhs, const url& rhs) {
+            return lhs.second < rhs.second;
+    });
+
+    // split the collection of URLs into groups based on the filename
+    std::vector<std::vector<url>> image_groups;
+    auto start = image_urls.begin();
+    while (start != image_urls.end()) {
+        auto end = std::find_if(start, image_urls.end(), [=](const url& item) {
+            return item.second != start->second;
+        });
+
+        image_groups.emplace_back(start, end);
+        start = end;
+    }
+
     std::vector<std::future<void>> image_threads;
+    image_threads.reserve(image_groups.size());
 
-    for (const auto& it : image_urls) {
-        auto off = it.find_last_of('/');
-        auto len = it.find_first_of('_') - off;
-        std::string filename = argv[1] + it.substr(off, len) + resolution;
+    const auto resolution = resolutions[12];
 
-        if (boost::filesystem::exists(boost::filesystem::path { filename })) {
-            continue;
-        }
-
+    // asynchronously download and save the images
+    for (const auto& group : image_groups) {
         image_threads.emplace_back(std::async(std::launch::async, [=]() {
-            image_request { "www.bing.com", it + resolution, filename }.run();
+            for (const auto& it : group) {
+                std::string file { argv[1] + it.second + resolution };
+
+                if (std::tr2::sys::exists(std::tr2::sys::path { file })) {
+                    break;
+                }
+
+                image_request { website, it.first + resolution, file }.run();
+            }
         }));
     }
 

@@ -23,10 +23,10 @@ namespace bbd {
 
     protected:
         boost::asio::io_service io_service;
-        boost::asio::streambuf request;
-        boost::asio::streambuf response;
         tcp::socket sock;
         tcp::resolver resolver;
+        boost::asio::streambuf request;
+        boost::asio::streambuf response;
         std::stringstream data;
     };
 }

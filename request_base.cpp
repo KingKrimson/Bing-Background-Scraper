@@ -11,7 +11,7 @@ namespace bbd {
 
     request_base::request_base(const std::string& server,
         const std::string& path)
-        : io_service(), resolver(io_service), sock(io_service)
+        : resolver(io_service), sock(io_service)
     {
         std::ostream request_stream { &request };
         request_stream << "GET " << path << " HTTP/1.0\r\n";
