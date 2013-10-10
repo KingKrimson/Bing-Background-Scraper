@@ -61,7 +61,7 @@ namespace {
                 std::string lhs { data.str(), start, end - start };
 
                 std::string rhs {
-                    std::find(lhs.crbegin(), lhs.crend(), '/').base(),
+                    std::find(lhs.crbegin(), lhs.crend(), '/').base() - 1,
                     std::find(lhs.cbegin(), lhs.cend(), '_') };
 
                 image_urls_mutex.lock();
