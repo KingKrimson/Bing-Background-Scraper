@@ -1,3 +1,13 @@
+/*=============================================================================\
+|
+|   Copyright (C) 2013 by Christopher Harpum.
+|
+|   File:       request_base.cpp
+|   Project:    bing background scraper
+|   Created:    2013-08-27
+|
+\=============================================================================*/
+
 #include "include\request_base.h"
 
 #include <string>
@@ -14,7 +24,8 @@ namespace bbd {
         : resolver(io_service), sock(io_service)
     {
         std::ostream request_stream { &request };
-        request_stream << "GET " << path << " HTTP/1.0\r\n";
+        request_stream << "GET " << path << " HTTP/1.1\r\n";
+        request_stream << "Connection: close\r\n";
         request_stream << "Host: " << server << "\r\n\r\n";
 
         tcp::resolver::query query(server, "http");
@@ -27,6 +38,8 @@ namespace bbd {
         size_t bytes_transferred)
     {
         if (!error) {
+            response.consume(bytes_transferred);
+
             boost::asio::async_read(sock, response,
                 boost::asio::transfer_at_least(1),
                 std::bind(&request_base::read_content, this,

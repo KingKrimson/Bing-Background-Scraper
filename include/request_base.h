@@ -1,6 +1,15 @@
+/*=============================================================================\
+|
+|   Copyright (C) 2013 by Christopher Harpum.
+|
+|   File:       request_base.h
+|   Project:    bing background scraper
+|   Created:    2013-08-27
+|
+\=============================================================================*/
+
 #pragma once
 
-#include <sstream>
 #include <string>
 #include <boost\asio.hpp>
 
@@ -27,6 +36,5 @@ namespace bbd {
         tcp::resolver resolver;
         boost::asio::streambuf request;
         boost::asio::streambuf response;
-        std::stringstream data;
     };
 }

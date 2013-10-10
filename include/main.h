@@ -1,7 +1,18 @@
+/*=============================================================================\
+|
+|   Copyright (C) 2013 by Christopher Harpum.
+|
+|   File:       main.h
+|   Project:    bing background scraper
+|   Created:    2013-08-27
+|
+\=============================================================================*/
+
 #pragma once
 
 #include "request_base.h"
 #include <string>
+#include <sstream>
 #include <vector>
 #include <array>
 
@@ -44,6 +55,9 @@ namespace {
         bing_xml_request(std::string, std::string);
 
         void read_content(const boost::system::error_code&, size_t) override;
+
+    private:
+        std::stringstream data;
     };
 
     class image_request final : public bbd::request_base {
@@ -54,6 +68,7 @@ namespace {
         void read_status(const boost::system::error_code&, size_t) override;
 
     private:
+        std::stringstream data;
         std::string filename;
     };
 }

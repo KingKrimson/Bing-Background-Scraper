@@ -1,3 +1,14 @@
+/*=============================================================================\
+|
+|   Copyright (C) 2013 by Christopher Harpum.
+|
+|   File:       main.cpp
+|   Project:    bing background scraper
+|   Created:    2013-08-27
+|
+\=============================================================================*/
+
+
 #include "include\main.h"
 #include "include\request_base.h"
 
@@ -33,15 +44,14 @@ namespace {
         size_t bytes_transferred)
     {
         if (!error) {
+            data << &response;
             request_base::read_content(error, bytes_transferred);
         } else {
-            data << &response;
-
             // find each image URL
             size_t pos { 0 };
             for (;;) {
-                auto start = data.str().find("<urlBase>", pos) + 9;
-                auto end = data.str().find("</urlBase>", start);
+                const auto start = data.str().find("<urlBase>", pos) + 9;
+                const auto end = data.str().find("</urlBase>", start);
 
                 if (start - 9 == std::string::npos ||
                     end == std::string::npos) {
@@ -50,12 +60,12 @@ namespace {
 
                 std::string lhs { data.str(), start, end - start };
 
-                auto off = lhs.find_last_of('/');
-                auto len = lhs.find_first_of('_') - off;
-                std::string rhs { lhs.substr(off, len) };
+                std::string rhs {
+                    std::find(lhs.crbegin(), lhs.crend(), '/').base(),
+                    std::find(lhs.cbegin(), lhs.cend(), '_') };
 
                 image_urls_mutex.lock();
-                image_urls.emplace_back(lhs, rhs);
+                image_urls.emplace_back(std::move(lhs), std::move(rhs));
                 image_urls_mutex.unlock();
 
                 pos = end + 10;
@@ -73,20 +83,19 @@ namespace {
         size_t bytes_transferred)
     {
         if (!error) {
+            data << &response;
             request_base::read_content(error, bytes_transferred);
         } else {
-            data << &response;
-
+            // check if data is an image
             if (data.str().substr(0, 4) != jpeg_magic_number) {
                 return;
             }
 
+            // save data to file
             auto out = std::ofstream { filename, std::ios::binary };
             if (out.is_open()) {
-                out << data.str();
+                out << data.rdbuf();
                 out.close();
-
-                std::cout << "saved: " << filename << std::endl;
             }
         }
     }
@@ -99,7 +108,7 @@ namespace {
 
             std::istream response_stream(&response);
             response_stream.ignore(numeric_limits<std::streamsize>::max(), ' ');
-            unsigned int status_code;
+            unsigned status_code;
             response_stream >> status_code;
 
             if (status_code != 200) {
@@ -116,13 +125,12 @@ int main(int argc, char **argv)
     // check for user-defined directory
     if (argc == 1) {
         std::string executable_name { argv[0] };
-        auto off = executable_name.find_last_of('\\') + 1;
-        auto len = executable_name.length();
-        executable_name = executable_name.substr(off, len - off);
+        const auto off = executable_name.find_last_of('\\') + 1;
+        const auto len = executable_name.length();
 
         std::cout << "please supply a save directory" << std::endl <<
-            "Example: \"" << executable_name << "\" \"C:/bing backgrounds\"" <<
-            std::endl;
+            "Example: \"" << executable_name.substr(off, len - off) <<
+            "\" \"C:/bing backgrounds\"" << std::endl;
         return 1;
     }
 
@@ -152,11 +160,13 @@ int main(int argc, char **argv)
     std::vector<std::vector<url>> image_groups;
     auto start = image_urls.begin();
     while (start != image_urls.end()) {
-        auto end = std::find_if(start, image_urls.end(), [=](const url& item) {
-            return item.second != start->second;
+        auto end = std::find_if(start, image_urls.end(),
+            [start](const url& item) {
+                return item.second != start->second;
         });
 
-        image_groups.emplace_back(start, end);
+        image_groups.emplace_back(std::make_move_iterator(start),
+            std::make_move_iterator(end));
         start = end;
     }
 
